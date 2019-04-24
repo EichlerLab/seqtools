@@ -19,6 +19,7 @@
 #include "boost/program_options.hpp"
 #include "boost/algorithm/string/trim.hpp"
 #include "boost/algorithm/string/split.hpp"
+#include "boost/algorithm/string.hpp"
 
 #include "htslib/sam.h"
 
@@ -44,8 +45,12 @@ int main(int argc, char *argv[]) {
 	string region;                  // Region
 	vector<string> inFileNameList;  // List of input files
 	string outFileName;             // Output file name
+	string searchQname;             // Extract sequences from records with this query name (QNAME) and ignore all other alignment records
 	bool verbose;                   // Verbose flag
 	bool base0Region;               // Region is in base-0 (BED) coordinates
+	bool printLoc;                  // Print regions to be extracted (e.g. chr*:10000-10100)
+
+	bool filterByQname = false;
 
 	// Region
 	string chr;
@@ -94,8 +99,10 @@ int main(int argc, char *argv[]) {
 			("help,h", "Print help")
 			("region,r", po::value<string>(&region), "Region to extract (1-based, inclusive, chr:start-end)")
 			("verbose,v", po::bool_switch(&verbose)->default_value(false), "Print verbose information")
-			("out,o", po::value<string>(&outFileName)->default_value(""), "Table of phased reads and HET-SNV counts")
+			("out,o", po::value<string>(&outFileName)->default_value(""), "Output FASTA file")
 			("base0,b", po::bool_switch(&base0Region)->default_value(false), "Region is in base-0 half-open coordinates (BED coordinates)")
+			("qname", po::value<string>(&searchQname)->default_value(""), "Extract sequences from records with this query name (QNAME) and ignore all other alignment records")
+			("print", po::bool_switch(&printLoc)->default_value(false), "Print extracted region names to the screen (e.g. chr*:10000-10100)")
 			;
 
 	po::options_description hidden_opts("Hidden options");
@@ -125,6 +132,14 @@ int main(int argc, char *argv[]) {
 		return ERR_USAGE;
 	}
 
+	// Get QNAME Filter
+	if (searchQname.size() > 0) {
+		filterByQname = true;
+
+		if (verbose)
+			cout << "Filtering by QNAME: " << searchQname << endl;
+	}
+
 	// Print help
 	if (vm.count("help")) {
 		cout << progName << " [<options>] input1.sam/bam/cram [input2...]\n" << endl;
@@ -143,6 +158,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	chr = regionTok[0];
+
+	boost::erase_all(regionTok[1], ",");
+	boost::erase_all(regionTok[2], ",");
+
 	pos = stoi(regionTok[1]);
 	end = stoi(regionTok[2]);
 
@@ -179,8 +198,12 @@ int main(int argc, char *argv[]) {
 			if (verbose)
 				cout << "Record: " << (char *) alignRecord->data << endl;
 
+			// Filter by QNAME
+			if (filterByQname && searchQname != (char *) alignRecord->data)
+				continue;
+
 			// Check chr, pos, and end (region must be fully-contained within the read)
-			if (chr != inHeader->target_name[alignRecord->core.tid]) {
+			if (alignRecord->core.tid >= 0 && chr != inHeader->target_name[alignRecord->core.tid]) {
 				if (verbose)
 					cout << "\t* No region for target: " << inHeader->target_name[alignRecord->core.tid] << endl;
 
@@ -190,7 +213,7 @@ int main(int argc, char *argv[]) {
 			if (alignRecord->core.pos > pos || bam_endpos(alignRecord) < end) {
 
 				if (verbose)
-					cout << "\t* Record does not cover query region" << endl;
+					cout << "\t* Record (" << alignRecord->core.pos << " - " << bam_endpos(alignRecord) << ") does not cover query region" << endl;
 
 				continue;
 			}
@@ -292,6 +315,9 @@ int main(int argc, char *argv[]) {
 			// Prepare
 			if (verbose)
 				cout << "\t* Extracting: " << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
+
+			if (printLoc)
+				cout << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
 
 			seq = bam_get_seq(alignRecord);
 
