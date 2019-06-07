@@ -18,10 +18,10 @@
 
 #include "boost/program_options.hpp"
 #include "boost/algorithm/string/trim.hpp"
-#include "boost/algorithm/string/split.hpp"
 #include "boost/algorithm/string.hpp"
 
 #include "htslib/sam.h"
+
 
 // Namespaces
 using namespace std;
@@ -56,7 +56,9 @@ int main(int argc, char *argv[]) {
 	string chr;
 	int pos;
 	int end;
-	vector<string> regionTok;
+    size_t region_end_loc;
+    size_t region_pos_loc;
+
 
 	// Output
 	ofstream *outStream;  // Output file stream
@@ -69,6 +71,9 @@ int main(int argc, char *argv[]) {
 	bam_hdr_t *inHeader;  // Header for input file
 
 	bam1_t *alignRecord = bam_init1();  // Alignment record
+
+	hts_idx_t *regionIndex;  // Region index (for extracting reads in region)
+	hts_itr_t *regionIter;   // Iterator over reads in the region
 
 	const uint32_t *cigar;  // Array of CIGAR operations
 	int nCigar;      // Number of CIGAR operations
@@ -150,20 +155,21 @@ int main(int argc, char *argv[]) {
 	// Parse region string
 	boost::trim(region);
 	region = regex_replace(region, regex("\\s+"), "-");
+	boost::erase_all(region, ",");
 
-	boost::split(regionTok, region, boost::is_any_of(":-_"));
+	region_end_loc = region.find_last_of(":-_ \t");
 
-	if (regionTok.size() != 3) {
-		err("Malformed region: Expected chr:pos-end (where delimiters may be :, -, _, or whitespace): \"%s\"", region.c_str());
-	}
+    if (region_end_loc == string::npos)
+    	err("Malformed region: Could not find end location: Expected chr:pos-end (where delimiters may be :, -, _, or whitespace): \"%s\"", region.c_str());
 
-	chr = regionTok[0];
+    region_pos_loc = region.find_last_of(":-_ \t", region_end_loc - 1);
 
-	boost::erase_all(regionTok[1], ",");
-	boost::erase_all(regionTok[2], ",");
+    if (region_pos_loc == string::npos)
+    	err("Malformed region: Could not find start location: Expected chr:pos-end (where delimiters may be :, -, _, or whitespace): \"%s\"", region.c_str());
 
-	pos = stoi(regionTok[1]);
-	end = stoi(regionTok[2]);
+    chr = region.substr(0, region_pos_loc);
+    pos = stoi(region.substr(region_pos_loc + 1, region_end_loc - region_pos_loc - 1));
+    end = stoi(region.substr(region_end_loc + 1));
 
 	if (verbose)
 		cout << "Region: " << chr << ":" << pos << "-" << end << endl;
@@ -188,12 +194,42 @@ int main(int argc, char *argv[]) {
 		if (verbose)
 			cout << "Reading " << inFileName << endl;
 
-		inFile = hts_open(inFileName.c_str(), "r");
+		// Open alignment file
+		//inFile = hts_open(inFileName.c_str(), "r");
+		inFile = sam_open(inFileName.c_str(), "r");
 
+		if (inFile == NULL) {
+			cerr << "Error opening input file" << endl;
+			return -1;
+		}
+
+		// Get header
 		inHeader = sam_hdr_read(inFile);
 
+		if (inHeader == NULL) {
+			cerr << "Error getting alignment header" << endl;
+			return -1;
+		}
+
+		// Get region index
+		regionIndex = sam_index_load(inFile, inFileName.c_str());
+
+		if (regionIndex == NULL) {
+			cerr << "Error indexing region" << endl;
+			return -1;
+		}
+
+		// Get region iterator
+		regionIter = sam_itr_querys(regionIndex, inHeader, region.c_str());
+
+		if (regionIter == NULL) {
+			cerr << "Error getting region iterator" << endl;
+			return -1;
+		}
+
 		// Read records
-		while (sam_read1(inFile, inHeader, alignRecord) >= 0) {
+		//while (sam_read1(inFile, inHeader, alignRecord) >= 0) {
+		while (sam_itr_next(inFile, regionIter, alignRecord) >= 0) {
 
 			if (verbose)
 				cout << "Record: " << (char *) alignRecord->data << endl;
@@ -333,11 +369,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			// End record
-			if ((subIndex - subPos) % 80 == 0)
-				out << flush;
-			else
-				out << endl;
-
+			out << endl;
 
 		}  // Loop records
 	}  // Loop alignment input files
