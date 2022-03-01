@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
 		filterByQname = true;
 
 		if (verbose)
-			cout << "Filtering by QNAME: " << searchQname << endl;
+			cerr << "Filtering by QNAME: " << searchQname << endl;
 	}
 
 	// Print help
@@ -172,7 +172,7 @@ int main(int argc, char *argv[]) {
     end = stoi(region.substr(region_end_loc + 1));
 
 	if (verbose)
-		cout << "Region: " << chr << ":" << pos << "-" << end << endl;
+		cerr << "Region: " << chr << ":" << pos << "-" << end << endl;
 
 	if (! base0Region)
 		pos -= 1;
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
 	// Read files
 	for (string inFileName : inFileNameList) {
 		if (verbose)
-			cout << "Reading " << inFileName << endl;
+			cerr << "Reading " << inFileName << endl;
 
 		// Open alignment file
 		//inFile = hts_open(inFileName.c_str(), "r");
@@ -232,7 +232,7 @@ int main(int argc, char *argv[]) {
 		while (sam_itr_next(inFile, regionIter, alignRecord) >= 0) {
 
 			if (verbose)
-				cout << "Record: " << (char *) alignRecord->data << endl;
+				cerr << "Record: " << (char *) alignRecord->data << endl;
 
 			// Filter by QNAME
 			if (filterByQname && searchQname != (char *) alignRecord->data)
@@ -241,7 +241,7 @@ int main(int argc, char *argv[]) {
 			// Check chr, pos, and end (region must be fully-contained within the read)
 			if (alignRecord->core.tid >= 0 && chr != inHeader->target_name[alignRecord->core.tid]) {
 				if (verbose)
-					cout << "\t* No region for target: " << inHeader->target_name[alignRecord->core.tid] << endl;
+					cerr << "\t* No region for target: " << inHeader->target_name[alignRecord->core.tid] << endl;
 
 				continue;
 			}
@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
 			if (alignRecord->core.pos > pos || bam_endpos(alignRecord) < end) {
 
 				if (verbose)
-					cout << "\t* Record (" << alignRecord->core.pos << " - " << bam_endpos(alignRecord) << ") does not cover query region" << endl;
+					cerr << "\t* Record (" << alignRecord->core.pos << " - " << bam_endpos(alignRecord) << ") does not cover query region" << endl;
 
 				continue;
 			}
@@ -344,16 +344,16 @@ int main(int argc, char *argv[]) {
 			//
 
 			if (subEnd <= subPos) {
-				cout << "\t* No sequence found: " << subPos << "-" << subEnd << endl;
+				cerr << "\t* No sequence found: " << subPos << "-" << subEnd << endl;
 				continue;
 			}
 
 			// Prepare
 			if (verbose)
-				cout << "\t* Extracting: " << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
+				cerr << "\t* Extracting: " << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
 
 			if (printLoc)
-				cout << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
+				cerr << (char *) alignRecord->data << ":" << subPos << "-" << subEnd << endl;
 
 			seq = bam_get_seq(alignRecord);
 

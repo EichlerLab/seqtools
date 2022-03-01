@@ -1,7 +1,7 @@
 #DIR_BOOST ?= /home/paudano/tools/modules/boost/1.65.1
 #DIR_HTSLIB ?= /home/paudano/tools/modules/htslib/1.9
 
-CXXFLAGS += -I$(abspath include) -I${DIR_BOOST}/include -I${DIR_HTSLIB}/include --std=c++14
+CXXFLAGS += -I$(abspath include) -I${DIR_BOOST}/include -I${DIR_HTSLIB}/include --std=c++11
 
 override LDFLAGS += -L${DIR_BOOST}/lib -L${DIR_HTSLIB}/lib -Wl,-rpath,${DIR_BOOST}/lib,-rpath,${DIR_HTSLIB}/lib -lboost_program_options -lrt -lpthread -lbz2 -lhts -llzma
 
@@ -22,3 +22,4 @@ build/%.o: src/%.cpp
 
 clean:
 	rm -rf build
+
